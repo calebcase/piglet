@@ -62,7 +62,7 @@ app.use(express.session({
 
 /* Data Types */
 resourceful.use('couchdb', {
-  'database': 'timeseries'
+  'database': 'piglet'
 });
 
 var ID = resourceful.define('id', function() {
@@ -128,7 +128,9 @@ app.get('/series/:id', function(req, res) {
     }
 
     res.type('application/json');
-    res.send(JSON.stringify(result, null, 2));
+    data = {'series': {}};
+    data.series[req.params.id] = null;
+    res.send(JSON.stringify(data, null, 2));
   });
 });
 
@@ -144,7 +146,9 @@ app.post('/series/:id', function(req, res) {
     }
 
     res.type('application/json');
-    res.send(JSON.stringify(result, null, 2));
+    data = {'series': {}};
+    data.series[req.params.id] = null;
+    res.send(JSON.stringify(data, null, 2));
   });
 });
 
@@ -163,13 +167,39 @@ app.get('/series/:id/:type', function(req, res) {
         return;
       }
 
-      res.type('application/json');
-      res.send(JSON.stringify(result, null, 2));
+      Data.find({
+        'type': 'data',
+        'parent': [req.params.id, req.params.type].join('/')
+      }, function(err, result) {
+        if (err !== null) {
+          res.type('application/json');
+          res.send(400, JSON.stringify(err, null, 2));
+          return;
+        }
+
+        var found = {};
+        for (var i = 0; i < result.length; i++) {
+          var data = result[i];
+          found[data.date] = data.value;
+        }
+
+        res.type('application/json');
+        data = {'series': {}};
+        data.series[req.params.id] = {};
+        data.series[req.params.id][req.params.type] = found;
+        res.send(JSON.stringify(found, null, 2));
+      });
     });
   });
 });
 
 app.post('/series/:id/:type', function(req, res) {
+  if (typeof(req.body.data) === 'undefined') {
+    res.type('application/json');
+    res.send(400, JSON.stringify({'message': 'Request body could not be parsed. Headers set?'}, null, 2));
+    return;
+  }
+
   ID.get(req.params.id, function(err, result) {
     if (err !== null) {
       res.type('application/json');
@@ -188,7 +218,6 @@ app.post('/series/:id/:type', function(req, res) {
         return;
       }
 
-
       var now = new Date();
       Data.create({
         'type': 'data',
@@ -204,7 +233,11 @@ app.post('/series/:id/:type', function(req, res) {
         }
 
         res.type('application/json');
-        res.send(JSON.stringify(result, null, 2));
+        data = {'series': {}};
+        data.series[req.params.id] = {};
+        data.series[req.params.id][req.params.type] = {};
+        data.series[req.params.id][req.params.type][result.date] = result.value;
+        res.send(JSON.stringify(data, null, 2));
       });
     });
   });
@@ -231,7 +264,7 @@ app.get('/series/:id/:type/:start', function(req, res) {
       }, function(err, result) {
         if (err !== null) {
           res.type('application/json');
-          res.send(400, JSON.stringif(err, null, 2));
+          res.send(400, JSON.stringify(err, null, 2));
           return;
         }
 
@@ -253,13 +286,22 @@ app.get('/series/:id/:type/:start', function(req, res) {
         }
 
         res.type('application/json');
-        res.send(JSON.stringify(found, null, 2));
+        data = {'series': {}};
+        data.series[req.params.id] = {};
+        data.series[req.params.id][req.params.type] = found;
+        res.send(JSON.stringify(data, null, 2));
       });
     });
   });
 });
 
 app.post('/series/:id/:type/:start', function(req, res) {
+  if (typeof(req.body.data) === 'undefined') {
+    res.type('application/json');
+    res.send(400, JSON.stringify({'message': 'Request body could not be parsed. Headers set?'}, null, 2));
+    return;
+  }
+
   ID.get(req.params.id, function(err, result) {
     if (err !== null) {
       res.type('application/json');
@@ -298,7 +340,11 @@ app.post('/series/:id/:type/:start', function(req, res) {
         }
 
         res.type('application/json');
-        res.send(JSON.stringify(result, null, 2));
+        data = {'series': {}};
+        data.series[req.params.id] = {};
+        data.series[req.params.id][req.params.type] = {};
+        data.series[req.params.id][req.params.type][result.date] = result.value;
+        res.send(JSON.stringify(data, null, 2));
       });
     });
   });
@@ -325,7 +371,7 @@ app.get('/series/:id/:type/:start/:stop', function(req, res) {
       }, function(err, result) {
         if (err !== null) {
           res.type('application/json');
-          res.send(400, JSON.stringif(err, null, 2));
+          res.send(400, JSON.stringify(err, null, 2));
           return;
         }
 
@@ -343,13 +389,16 @@ app.get('/series/:id/:type/:start/:stop', function(req, res) {
         for (var i = 0; i < result.length; i++) {
           var data = result[i];
           if (data.date >= since.getTime() &&
-              date.date <= until.getTime()) {
+              data.date <= until.getTime()) {
             found[data.date] = data.value;
           }
         }
 
         res.type('application/json');
-        res.send(JSON.stringify(found, null, 2));
+        data = {'series': {}};
+        data.series[req.params.id] = {};
+        data.series[req.params.id][req.params.type] = found;
+        res.send(JSON.stringify(data, null, 2));
       });
     });
   });
