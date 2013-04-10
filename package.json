@@ -1,0 +1,32 @@
+{
+  "name": "piglet",
+  "version": "0.0.1",
+  "author": "Caleb Case <calebcase@gmail.com>",
+  "description": "Your friendly little restful time series service.",
+  "contributors": [
+    {
+      "name": "Caleb Case",
+      "email": "calebcase@gmail.com"
+    }
+  ],
+  "scripts": {
+    "start": "node app.js"
+  },
+  "main": "app",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/calebcase/piglet.git"
+  },
+  "keywords": [
+    "time",
+    "series",
+    "server"
+  ],
+  "dependencies": {
+    "connect": "*",
+    "express": "*",
+    "resourceful": "*",
+    "timespec": "*"
+  },
+  "license": "Apache"
+}
