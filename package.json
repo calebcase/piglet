@@ -1,6 +1,6 @@
 {
   "name": "piglet",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "author": "Caleb Case <calebcase@gmail.com>",
   "description": "Your friendly little restful time series service.",
   "contributors": [
@@ -25,6 +25,8 @@
   "dependencies": {
     "connect": "*",
     "express": "*",
+    "minimatch": "*",
+    "mongoose": "*",
     "resourceful": "*",
     "timespec": "*"
   },
