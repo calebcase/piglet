@@ -23,11 +23,11 @@
     "server"
   ],
   "dependencies": {
+    "async": "*",
     "connect": "*",
     "express": "*",
     "minimatch": "*",
     "mongoose": "*",
-    "resourceful": "*",
     "timespec": "*"
   },
   "license": "Apache"
