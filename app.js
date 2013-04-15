@@ -77,25 +77,26 @@ var Schema = mongoose.Schema;
 
 var idSchema = new Schema({
   '_id': { 'type': String },
-  'type': { 'type': String, 'default': 'id' },
+}, {
+  'collection': 'id'
 });
 
 var ID = mongoose.model('ID', idSchema);
 
 var typeSchema = new Schema({
   '_id': { 'type': String },
-  'type': { 'type': String, 'default': 'type' },
-  'parent': { 'type': String, 'ref': 'ID' },
+}, {
+  'collection': 'type'
 });
 
 var Type = mongoose.model('Type', typeSchema);
 
 var dataSchema = new Schema({
   '_id': { 'type': String },
-  'type': { 'type': String, 'default': 'data' },
-  'parent': { 'type': String, 'ref': 'Type' },
-  'date': { 'type': Date, 'default': Date.now },
+  'date': { 'type': Date },
   'value': { 'type': Number },
+}, {
+  'collection': 'data'
 });
 
 var Data = mongoose.model('Data', dataSchema);
@@ -212,122 +213,67 @@ app.put(/\/series(?:\/([^\/]+)(?:\/([^\/]+)(?:\/([^\/]+)(?:\/([^\/]+))?)?)?)?/, 
   var tasks = [];
 
   /* Remove the related documents. */
-  if (!id_matcher) {
+  if (!start) {
+    var data_glob = '';
+    data_glob += req.params.id ? req.params.id : '*';
+    data_glob += req.params.type ? '/' + req.params.type : '/*';
+    data_glob += '/*';
+    var search = new minimatch.Minimatch(data_glob, minimatch_options).makeRe();
     tasks.push(function(cb) {
-      /* Remove the related documents. */
-      mongoose.connection.db.dropDatabase(function(err, result) {
+      Data.find({ '_id': search}).remove(function(err, result) {
         cb(null, err);
       });
     });
   }
   else {
-    if (!type_matcher) {
+    var path = [req.params.id, req.params.type].join('/');
+    if (!stop) {
       tasks.push(function(cb) {
-        var search = new minimatch.Minimatch(req.params.id + '/*/*', minimatch_options).makeRe();
-        Data.find({ '_id': search}).remove(function(err, result) {
-          cb(null, err);
-        });
-      });
-
-      tasks.push(function(cb) {
-        var search = new minimatch.Minimatch(req.params.id + '/*', minimatch_options).makeRe();
-        Type.find({ '_id': search}).remove(function(err, result) {
+        var search = new minimatch.Minimatch(path + '/*', minimatch_options).makeRe();
+        Data.find({ '_id': search})
+        .where('date')
+        .gte(start)
+        .remove(function(err, result) {
           cb(null, err);
         });
       });
     }
     else {
-      var path = [req.params.id, req.params.type].join('/');
-      if (!start) {
-        tasks.push(function(cb) {
-          var search = new minimatch.Minimatch(path + '/*', minimatch_options).makeRe();
-          Data.find({ '_id': search})
-          .remove(function(err, result) {
-            cb(null, err);
-          });
-        });
-      }
-      else {
-        if (!stop) {
-          tasks.push(function(cb) {
-            var search = new minimatch.Minimatch(path + '/*', minimatch_options).makeRe();
-            Data.find({ '_id': search})
-            .where('date')
-            .gte(start)
-            .remove(function(err, result) {
-              cb(null, err);
-            });
-          });
-        }
-        else {
-          tasks.push(function(cb) {
-            var search = new minimatch.Minimatch(path + '/*', minimatch_options).makeRe();
-            Data.find({ '_id': search})
-            .where('date')
-            .gte(start)
-            .lte(stop)
-            .remove(function(err, result) {
-              cb(null, err);
-            });
-          });
-        }
-      }
-
       tasks.push(function(cb) {
-        var search = new minimatch.Minimatch(req.params.id + '/*', minimatch_options).makeRe();
-        Type.find({ '_id': search}).remove(function(err, result) {
+        var search = new minimatch.Minimatch(path + '/*', minimatch_options).makeRe();
+        Data.find({ '_id': search})
+        .where('date')
+        .gte(start)
+        .lte(stop)
+        .remove(function(err, result) {
           cb(null, err);
         });
       });
     }
-
-    tasks.push(function(cb) {
-      ID.find({ '_id': id_matcher }).remove(function(err, result) {
-        cb(null, err);
-      });
-    });
   }
 
   /* Put the supplied document in. */
   for (var id in series) {
     if (id_matcher === null || id_matcher.exec(id)) {
-      tasks.push(function(cb) {
-        var instance = new ID();
-        instance._id = id;
-        instance.save(function(err) {
-          if (err) err.path = ['series', id].join('/');
-          cb(null, err);
-        });
-      });
-
       for (var type in series[id]) {
         if (type_matcher === null || type_matcher.exec(type)) {
-          tasks.push(function(cb) {
-            var instance = new Type();
-            instance._id = [id, type].join('/');
-            instance.parent = id;
-            instance.save(function(err) {
-              if (err) err.path = ['series', id, type].join('/');
-              cb(null, err);
-            });
-          });
-
           for (var date in series[id][type]) {
             var date_int = parseInt(date);
             if (start === null ||
                 ((stop === null && date_int >= start) ||
                  (date_int >= start && date_int <= stop))) {
-              tasks.push(function(cb) {
-                var instance = new Data();
-                instance._id = [id, type, date].join('/');
-                instance.parent = [id, type].join('/');
-                instance.date = new Date(parseInt(date));
-                instance.value = series[id][type][date];
-                instance.save(function(err) {
-                  if (err) err.path = ['series', id, type, date].join('/');
-                  cb(null, err);
+              (function(id, type, date) {
+                tasks.push(function(cb) {
+                  var instance = new Data();
+                  instance._id = [id, type, date].join('/');
+                  instance.date = new Date(parseInt(date));
+                  instance.value = series[id][type][date];
+                  instance.save(function(err) {
+                    if (err) err.path = ['series', id, type, date].join('/');
+                    cb(null, err);
+                  });
                 });
-              });
+              })(id, type, date);
             }
           }
         }
@@ -351,13 +297,13 @@ app.put(/\/series(?:\/([^\/]+)(?:\/([^\/]+)(?:\/([^\/]+)(?:\/([^\/]+))?)?)?)?/, 
 });
 
 app.get('/series/:id', function(req, res) {
-  var search = new minimatch.Minimatch(req.params.id, minimatch_options).makeRe();
+  var search = new minimatch.Minimatch(req.params.id + '/*', minimatch_options).makeRe();
   if (!search) {
     res.type('application/json');
     res.send(400, JSON.stringify({ 'message': 'Invalid glob specified.' }, null, 2));
   }
 
-  Type.find({ 'parent': search }, function(err, result) {
+  Type.find({ '_id': search }, function(err, result) {
     if (err !== null) {
       res.type('application/json');
       res.send(400, JSON.stringify(err, null, 2));
@@ -366,30 +312,15 @@ app.get('/series/:id', function(req, res) {
 
     var data = { 'series': {} };
     for (var i = 0; i < result.length; i++) {
-      if (!(result[i].parent in data.series)) {
-        data.series[result[i].parent] = {};
+      var segments = result[i]._id.split('/');
+      var id = segments[0];
+      var type = segments[1];
+      if (!(id in data.series)) {
+        data.series[id] = {};
       }
 
-      data.series[result[i].parent][result[i]._id.split('/')[1]] = null;
+      data.series[id][type] = null;
     }
-
-    res.type('application/json');
-    res.send(JSON.stringify(data, null, 2));
-  });
-});
-
-app.post('/series/:id', function(req, res) {
-  var instance = new ID();
-  instance._id = req.params.id;
-  instance.save(function(err) {
-    if (err !== null) {
-      res.type('application/json');
-      res.send(400, JSON.stringify(err, null, 2));
-      return;
-    }
-
-    data = { 'series': {} };
-    data.series[req.params.id] = null;
 
     res.type('application/json');
     res.send(JSON.stringify(data, null, 2));
@@ -397,25 +328,22 @@ app.post('/series/:id', function(req, res) {
 });
 
 app.delete('/series/:id', function(req, res) {
-  var search = new minimatch.Minimatch(req.params.id + '/*', minimatch_options).makeRe();
+  var search = new minimatch.Minimatch(req.params.id + '/*/*', minimatch_options).makeRe();
   if (!search) {
     res.type('application/json');
     res.send(400, JSON.stringify({ 'message': 'Invalid glob specified.' }, null, 2));
   }
 
-  Data.find({ 'parent': search }).remove();
+  Data.find({ '_id': search }).remove(function(err, result) {
+    var search = new minimatch.Minimatch(req.params.id + '/*', minimatch_options).makeRe();
+    if (!search) {
+      res.type('application/json');
+      res.send(400, JSON.stringify({ 'message': 'Invalid glob specified.' }, null, 2));
+    }
 
-  var search = new minimatch.Minimatch(req.params.id, minimatch_options).makeRe();
-  if (!search) {
     res.type('application/json');
-    res.send(400, JSON.stringify({ 'message': 'Invalid glob specified.' }, null, 2));
-  }
-
-  Type.find({ 'parent': search }).remove();
-  ID.find({ '_id': search }).remove();
-
-  res.type('application/json');
-  res.send(JSON.stringify({ 'status': 'ok' }, null, 2));
+    res.send(JSON.stringify({ 'status': 'ok' }, null, 2));
+  });
 });
 
 app.get(/\/series\/(([^\/]+)\/([^\/]+))(?:\/([^\/]+)(?:\/([^\/]+))?)?/, function(req, res) {
@@ -426,7 +354,7 @@ app.get(/\/series\/(([^\/]+)\/([^\/]+))(?:\/([^\/]+)(?:\/([^\/]+))?)?/, function
   req.params.start = req.params[3];
   req.params.stop = req.params[4];
 
-  var search = new minimatch.Minimatch(req.params.path, minimatch_options).makeRe();
+  var search = new minimatch.Minimatch(req.params.path + '/*', minimatch_options).makeRe();
   if (!search) {
     res.type('application/json');
     res.send(400, JSON.stringify({ 'message': 'Invalid glob specified.' }, null, 2));
@@ -442,9 +370,10 @@ app.get(/\/series\/(([^\/]+)\/([^\/]+))(?:\/([^\/]+)(?:\/([^\/]+))?)?/, function
     var data = { 'series': {} };
 
     for (var i = 0; i < result.length; i++) {
-      var segments = result[i].parent.split('/');
+      var segments = result[i]._id.split('/');
       var id = segments[0];
       var type = segments[1];
+      var date = segments[2];
 
       if (!(id in data.series)) {
         data.series[id] = {};
@@ -454,7 +383,7 @@ app.get(/\/series\/(([^\/]+)\/([^\/]+))(?:\/([^\/]+)(?:\/([^\/]+))?)?/, function
         data.series[id][type] = {};
       }
 
-      data.series[id][type][result[i].date.getTime()] = result[i].value;
+      data.series[id][type][date] = result[i].value;
     }
 
     res.type('application/json');
@@ -463,14 +392,14 @@ app.get(/\/series\/(([^\/]+)\/([^\/]+))(?:\/([^\/]+)(?:\/([^\/]+))?)?/, function
 
   if (!req.params.start && !req.params.stop) {
     Data.find({
-      'parent': search
+      '_id': search
     }, cb);
   }
   else if (req.params.start && !req.params.stop) {
     var start = date_like(req.params.start);
 
     Data.find({
-      'parent': search
+      '_id': search
     })
     .where('date')
     .gte(start)
@@ -481,7 +410,7 @@ app.get(/\/series\/(([^\/]+)\/([^\/]+))(?:\/([^\/]+)(?:\/([^\/]+))?)?/, function
     var stop = date_like(req.params.stop);
 
     Data.find({
-      'parent': search
+      '_id': search
     })
     .where('date')
     .gte(start)
@@ -508,51 +437,29 @@ app.post(/\/series\/(([^\/]+)\/([^\/]+))(?:\/([^\/]+))?/, function(req, res) {
     return;
   }
 
-  Type.find({ '_id': req.params.path }, function(err, result) {
+  var now = new Date();
+  if (req.params.start) {
+    now = date_like(req.params.start);
+  }
+
+  var instance = new Data();
+  instance._id = [req.params.path, now.getTime()].join('/');
+  instance.date = now;
+  instance.value = req.body.value;
+  instance.save(function(err) {
     if (err !== null) {
       res.type('application/json');
       res.send(400, JSON.stringify(err, null, 2));
       return;
     }
 
-    if (result.length === 0) {
-      var instance = new Type();
-      instance._id = req.params.path;
-      instance.parent = req.params.id;
-      instance.save(function(err) {
-        if (err !== null) {
-          res.type('application/json');
-          res.send(400, JSON.stringify(err, null, 2));
-          return;
-        }
-      });
-    }
+    data = { 'series': {} };
+    data.series[req.params.id] = {};
+    data.series[req.params.id][req.params.type] = {};
+    data.series[req.params.id][req.params.type][now.getTime()] = req.body.value;
 
-    var now = new Date();
-    if (req.params.start) {
-      now = date_like(req.params.start);
-    }
-
-    var instance = new Data();
-    instance._id = [req.params.path, now.getTime()];
-    instance.parent = req.params.path;
-    instance.date = now;
-    instance.value = req.body.value;
-    instance.save(function(err) {
-      if (err !== null) {
-        res.type('application/json');
-        res.send(400, JSON.stringify(err, null, 2));
-        return;
-      }
-
-      data = { 'series': {} };
-      data.series[req.params.id] = {};
-      data.series[req.params.id][req.params.type] = {};
-      data.series[req.params.id][req.params.type][now.getTime()] = req.body.value;
-
-      res.type('application/json');
-      res.send(JSON.stringify(data, null, 2));
-    });
+    res.type('application/json');
+    res.send(JSON.stringify(data, null, 2));
   });
 });
 
@@ -567,11 +474,6 @@ app.delete(/\/series\/(([^\/]+)\/([^\/]+))/, function(req, res) {
     res.send(400, JSON.stringify({ 'message': 'Invalid glob specified.' }, null, 2));
   }
 
-  Type.find({
-    '_id': search
-  })
-  .remove();
-
   res.type('application/json');
   res.send(JSON.stringify({ 'status': 'ok' }, null, 2));
 });
@@ -584,7 +486,7 @@ app.delete(/\/series\/(([^\/]+)\/([^\/]+))\/(?:([^\/]+)(?:\/([^\/]+))?)?/, funct
   req.params.start = req.params[3];
   req.params.stop = req.params[4];
 
-  var search = new minimatch.Minimatch(req.params.path, minimatch_options).makeRe();
+  var search = new minimatch.Minimatch(req.params.path + '/*', minimatch_options).makeRe();
   if (!search) {
     res.type('application/json');
     res.send(400, JSON.stringify({ 'message': 'Invalid glob specified.' }, null, 2));
@@ -592,7 +494,7 @@ app.delete(/\/series\/(([^\/]+)\/([^\/]+))\/(?:([^\/]+)(?:\/([^\/]+))?)?/, funct
 
   if (!req.params.start && !req.params.stop) {
     Data.find({
-      'parent': search
+      '_id': search
     })
     .remove();
   }
@@ -600,7 +502,7 @@ app.delete(/\/series\/(([^\/]+)\/([^\/]+))\/(?:([^\/]+)(?:\/([^\/]+))?)?/, funct
     var start = date_like(req.params.start);
 
     Data.find({
-      'parent': search
+      '_id': search
     })
     .where('date')
     .gte(start)
@@ -611,7 +513,7 @@ app.delete(/\/series\/(([^\/]+)\/([^\/]+))\/(?:([^\/]+)(?:\/([^\/]+))?)?/, funct
     var stop = date_like(req.params.stop);
 
     Data.find({
-      'parent': search
+      '_id': search
     })
     .where('date')
     .gte(start)
