@@ -27,6 +27,7 @@
     "connect": "*",
     "express": "*",
     "minimatch": "*",
+    "mongodb": "*",
     "mongoose": "*",
     "timespec": "*"
   },

@@ -20,6 +20,8 @@ var minimatch = require('minimatch');
 var mongoose = require('mongoose');
 var timespec = require('timespec');
 
+var mongodb = require('mongodb');
+
 var MemoryStore = connect.session.MemoryStore;
 
 var minimatch_options = {
@@ -60,6 +62,7 @@ function date_like(str) {
 }
 
 var app = express();
+app.use(express.compress());
 app.use(express.bodyParser());
 app.use(express.cookieParser());
 app.use(express.session({
@@ -393,7 +396,9 @@ app.get(/\/series\/(([^\/]+)\/([^\/]+))(?:\/([^\/]+)(?:\/([^\/]+))?)?/, function
   if (!req.params.start && !req.params.stop) {
     Data.find({
       '_id': search
-    }, cb);
+    })
+    .batchSize(1000)
+    .exec(cb);
   }
   else if (req.params.start && !req.params.stop) {
     var start = date_like(req.params.start);
@@ -401,6 +406,7 @@ app.get(/\/series\/(([^\/]+)\/([^\/]+))(?:\/([^\/]+)(?:\/([^\/]+))?)?/, function
     Data.find({
       '_id': search
     })
+    .batchSize(1000)
     .where('date')
     .gte(start)
     .exec(cb);
@@ -412,6 +418,7 @@ app.get(/\/series\/(([^\/]+)\/([^\/]+))(?:\/([^\/]+)(?:\/([^\/]+))?)?/, function
     Data.find({
       '_id': search
     })
+    .batchSize(1000)
     .where('date')
     .gte(start)
     .lte(stop)
